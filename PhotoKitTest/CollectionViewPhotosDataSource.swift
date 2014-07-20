@@ -68,11 +68,14 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
 
                 dispatch_async(loadFetchResultsQueue) {
 
+                    // Get the PHFetchResult for the asset collection - this is the slow part
                     self.cachedFetchResults[assetCollection.localIdentifier] = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
 
                     dispatch_async(dispatch_get_main_queue()) {
+                        // Clear the asset collection's identifier from the queued list
                         self.identifiersForPendingFetchResults[assetCollection.localIdentifier] = nil
 
+                        // Reload the collection view's section
                         UIView.performWithoutAnimation() {
                             collectionView.reloadSections(NSIndexSet(index: indexPath.section))
                         }
