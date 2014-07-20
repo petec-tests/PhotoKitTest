@@ -9,6 +9,7 @@ import Photos
 
 
 class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSource, PHPhotoLibraryChangeObserver {
+    
     let assetCollectionFetchResult: PHFetchResult
     let dequeueCellForAsset: (asset: PHAsset, indexPath: NSIndexPath) -> UICollectionViewCell
     let dequeuePlaceholderCell: (indexPath: NSIndexPath) -> UICollectionViewCell
@@ -40,18 +41,18 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
 
         let assetCollection = assetCollectionFetchResult[section] as PHAssetCollection
 
-        // Use the estimated count if the section isn't visible
+        // Work out if the section is visible
         let visibleIndexPaths = collectionView.indexPathsForVisibleItems() as [NSIndexPath]
-        var useEstimatedCount = true
+        var sectionIsVisibe = false
 
         for indexPath in visibleIndexPaths {
             if indexPath.section == section {
-                useEstimatedCount = false
+                sectionIsVisibe = true
                 break
             }
         }
 
-        if useEstimatedCount {
+        if !sectionIsVisibe {
             return assetCollection.estimatedAssetCount
         }
         else {
