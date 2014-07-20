@@ -13,7 +13,7 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
     let dequeueCellForAsset: (asset: PHAsset, indexPath: NSIndexPath) -> UICollectionViewCell
     let dequeuePlaceholderCell: (indexPath: NSIndexPath) -> UICollectionViewCell
 
-    var cachedSectionFetchResults = [Int: PHFetchResult]()
+    var cachedFetchResults = [String: PHFetchResult]()
 
     init(fetchResult: PHFetchResult,
         dequeueCellForAsset: (asset: PHAsset, indexPath: NSIndexPath) -> UICollectionViewCell,
@@ -38,6 +38,8 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
 
     func collectionView(collectionView: UICollectionView!, numberOfItemsInSection section: Int) -> Int {
 
+        let assetCollection = assetCollectionFetchResult[section] as PHAssetCollection
+
         // Use the estimated count if the section isn't visible
         let visibleIndexPaths = collectionView.indexPathsForVisibleItems() as [NSIndexPath]
         var useEstimatedCount = true
@@ -50,24 +52,23 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
         }
 
         if useEstimatedCount {
-            let assetCollection = assetCollectionFetchResult[section] as PHAssetCollection
             return assetCollection.estimatedAssetCount
         }
         else {
-            let fetchedAssets = fetchResultForSectionAtIndex(section)
+            let fetchedAssets = fetchResultForAssetCollection(assetCollection)
             return fetchedAssets.count
         }
     }
 
 
     func collectionView(collectionView: UICollectionView!, cellForItemAtIndexPath indexPath: NSIndexPath!) -> UICollectionViewCell! {
+        let assetCollection = assetCollectionFetchResult[indexPath.section] as PHAssetCollection
 
         // Check if we've used an estimated count for the section up to now
-        if cachedSectionFetchResults[indexPath.section] == nil {
+        if cachedFetchResults[assetCollection.localIdentifier] == nil {
 
             // If the estimated count isn't the same as the actual count, return an empty cell and reload the section
-            let assetCollection = assetCollectionFetchResult[indexPath.section] as PHAssetCollection
-            let fetchedAssets = fetchResultForSectionAtIndex(indexPath.section)
+            let fetchedAssets = fetchResultForAssetCollection(assetCollection)
 
             if fetchedAssets.count != assetCollection.estimatedAssetCount {
                 let placeholderCell = dequeuePlaceholderCell(indexPath: indexPath)
@@ -89,20 +90,21 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
 
     // ----
 
-    func fetchResultForSectionAtIndex(index: Int) -> PHFetchResult {
-        var fetchResult = cachedSectionFetchResults[index]
+    func fetchResultForAssetCollection(assetCollection: PHAssetCollection) -> PHFetchResult {
+        var fetchResult = cachedFetchResults[assetCollection.localIdentifier]
 
         if fetchResult == nil {
-            let assetCollection = assetCollectionFetchResult[index] as PHAssetCollection
             fetchResult = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
-            
-            cachedSectionFetchResults[index] = fetchResult!
+            cachedFetchResults[assetCollection.localIdentifier] = fetchResult!
         }
 
         return fetchResult!
     }
 
     func assetAtIndexPath(indexPath: NSIndexPath) -> PHAsset {
-        return fetchResultForSectionAtIndex(indexPath.section)[indexPath.row] as PHAsset
+        let assetCollection = assetCollectionFetchResult[indexPath.section] as PHAssetCollection
+        let fetchResult = fetchResultForAssetCollection(assetCollection)
+
+        return fetchResult[indexPath.row] as PHAsset
     }
 }
