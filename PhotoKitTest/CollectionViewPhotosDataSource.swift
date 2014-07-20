@@ -8,13 +8,17 @@ import Photos
 
 
 
-class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSource, PHPhotoLibraryChangeObserver {
-    
+class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSource {
+
     let assetCollectionFetchResult: PHFetchResult
     let dequeueCellForAsset: (asset: PHAsset, indexPath: NSIndexPath) -> UICollectionViewCell
     let dequeuePlaceholderCell: (indexPath: NSIndexPath) -> UICollectionViewCell
 
     var cachedFetchResults = [String: PHFetchResult]()
+
+    var identifiersForPendingFetchResults = [String: String]()
+    var loadFetchResultsQueue = dispatch_queue_create("CollectionViewAssetCollectionDataSource", DISPATCH_QUEUE_SERIAL)
+
 
     init(fetchResult: PHFetchResult,
         dequeueCellForAsset: (asset: PHAsset, indexPath: NSIndexPath) -> UICollectionViewCell,
@@ -25,12 +29,10 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
         self.dequeuePlaceholderCell = dequeuePlaceholderCell
 
         super.init()
-
-        PHPhotoLibrary.sharedPhotoLibrary().registerChangeObserver(self)
     }
 
 
-    // ---- UICollectionViewDataSource
+    // ---- UICollectionViewDataSource methods
 
     func numberOfSectionsInCollectionView(collectionView: UICollectionView!) -> Int {
         return assetCollectionFetchResult.count
@@ -41,23 +43,12 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
 
         let assetCollection = assetCollectionFetchResult[section] as PHAssetCollection
 
-        // Work out if the section is visible
-        let visibleIndexPaths = collectionView.indexPathsForVisibleItems() as [NSIndexPath]
-        var sectionIsVisibe = false
-
-        for indexPath in visibleIndexPaths {
-            if indexPath.section == section {
-                sectionIsVisibe = true
-                break
-            }
-        }
-
-        if !sectionIsVisibe {
-            return assetCollection.estimatedAssetCount
+        // Return the actual count if we know it
+        if let fetchResult = cachedFetchResults[assetCollection.localIdentifier] {
+            return fetchResult.count
         }
         else {
-            let fetchedAssets = fetchResultForAssetCollection(assetCollection)
-            return fetchedAssets.count
+            return assetCollection.estimatedAssetCount
         }
     }
 
@@ -65,47 +56,33 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
     func collectionView(collectionView: UICollectionView!, cellForItemAtIndexPath indexPath: NSIndexPath!) -> UICollectionViewCell! {
         let assetCollection = assetCollectionFetchResult[indexPath.section] as PHAssetCollection
 
-        // Check if we've used an estimated count for the section up to now
-        if cachedFetchResults[assetCollection.localIdentifier] == nil {
+        if let fetchResult = cachedFetchResults[assetCollection.localIdentifier] {
+            // We already have the PHFetchResult for this asset collection, so get a cell for it
+            return dequeueCellForAsset(asset: fetchResult[indexPath.row] as PHAsset, indexPath: indexPath)
+        }
+        else {
+            // We don't have the PHFetchResult for this asset collection yet
 
-            // If the estimated count isn't the same as the actual count, return an empty cell and reload the section
-            let fetchedAssets = fetchResultForAssetCollection(assetCollection)
+            // Queue a closure to get the fetch results for asset collection if we haven't already done so
+            if identifiersForPendingFetchResults[assetCollection.localIdentifier] == nil {
 
-            if fetchedAssets.count != assetCollection.estimatedAssetCount {
-                let placeholderCell = dequeuePlaceholderCell(indexPath: indexPath)
-                collectionView.reloadSections(NSIndexSet(index: indexPath.section))
+                dispatch_async(loadFetchResultsQueue) {
 
-                return placeholderCell
+                    self.cachedFetchResults[assetCollection.localIdentifier] = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
+
+                    dispatch_async(dispatch_get_main_queue()) {
+                        self.identifiersForPendingFetchResults[assetCollection.localIdentifier] = nil
+
+                        UIView.performWithoutAnimation() {
+                            collectionView.reloadSections(NSIndexSet(index: indexPath.section))
+                        }
+                    }
+                }
+
+                identifiersForPendingFetchResults[assetCollection.localIdentifier] = assetCollection.localIdentifier
             }
+
+            return dequeuePlaceholderCell(indexPath: indexPath)
         }
-
-        return dequeueCellForAsset(asset: assetAtIndexPath(indexPath), indexPath: indexPath)
-    }
-
-
-    // ----
-
-    func photoLibraryDidChange(changeInstance: PHChange!) {
-    }
-
-
-    // ----
-
-    func fetchResultForAssetCollection(assetCollection: PHAssetCollection) -> PHFetchResult {
-        var fetchResult = cachedFetchResults[assetCollection.localIdentifier]
-
-        if fetchResult == nil {
-            fetchResult = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
-            cachedFetchResults[assetCollection.localIdentifier] = fetchResult!
-        }
-
-        return fetchResult!
-    }
-
-    func assetAtIndexPath(indexPath: NSIndexPath) -> PHAsset {
-        let assetCollection = assetCollectionFetchResult[indexPath.section] as PHAssetCollection
-        let fetchResult = fetchResultForAssetCollection(assetCollection)
-
-        return fetchResult[indexPath.row] as PHAsset
     }
 }
