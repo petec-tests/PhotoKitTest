@@ -63,16 +63,18 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
         else {
             // We don't have the PHFetchResult for this asset collection yet
 
-            // Queue a closure to get the fetch results for asset collection if we haven't already done so
+            // Check if we've already queued a closure to get the PHFetchResult
             if identifiersForPendingFetchResults[assetCollection.localIdentifier] == nil {
 
-                dispatch_async(loadFetchResultsQueue) {
+                // Add the asset collection's identifier to the list of asset collections we're waiting for fetch results for
+                identifiersForPendingFetchResults[assetCollection.localIdentifier] = assetCollection.localIdentifier
 
+                dispatch_async(loadFetchResultsQueue) {
                     // Get the PHFetchResult for the asset collection - this is the slow part
-                    self.cachedFetchResults[assetCollection.localIdentifier] = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
+                    let fetchResult = PHAsset.fetchAssetsInAssetCollection(assetCollection, options: nil)
 
                     dispatch_async(dispatch_get_main_queue()) {
-                        // Clear the asset collection's identifier from the queued list
+                        self.cachedFetchResults[assetCollection.localIdentifier] = fetchResult
                         self.identifiersForPendingFetchResults[assetCollection.localIdentifier] = nil
 
                         // Reload the collection view's section
@@ -81,8 +83,6 @@ class CollectionViewAssetCollectionDataSource: NSObject, UICollectionViewDataSou
                         }
                     }
                 }
-
-                identifiersForPendingFetchResults[assetCollection.localIdentifier] = assetCollection.localIdentifier
             }
 
             return dequeuePlaceholderCell(indexPath: indexPath)
